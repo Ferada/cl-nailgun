@@ -42,6 +42,11 @@ You have to have the nailgun client installed.
 - If you're willing to have special code to leave out the multithreaded
   stream implementation feel free to submit code.
 - Not all programs IO, so a simplified model could be used in that case,
-  leaving out the stream handling entirely.
+  leaving out the stream handling via threading entirely.  Could be useful for
+  single-threaded Lisps?
+- The nailgun client has a few more features, eclim also has a modified version
+  with a keep-alive flag.
+- Working directory should be a `PATHNAME`.
+- Thread pool instead of spawning them all over the place.
 
 [nailgun]: <https://github.com/martylamb/nailgun> "nailgun"
