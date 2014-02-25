@@ -6,6 +6,13 @@ Copyright (C) 2014 Olof-Joachim Frahm
 
 Release under a Simplified BSD license.
 
+# DEPENDENCIES
+
+- a nailgun client, e.g. from [nailgun]
+- bordeaux-threads, trivial-gray-streams, babel, alexandria, flexi-streams
+
+Should be reasonably portable.
+
 # WHY
 
 The main application of this library is to run scripts without the high
@@ -36,3 +43,5 @@ You have to have the nailgun client installed.
   stream implementation feel free to submit code.
 - Not all programs IO, so a simplified model could be used in that case,
   leaving out the stream handling entirely.
+
+[nailgun]: <https://github.com/martylamb/nailgun> "nailgun"
