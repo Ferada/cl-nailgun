@@ -3,6 +3,7 @@
 (in-package #:cl-nailgun)
 
 (defvar *default-buffer-size* 128)
+(defvar *max-buffer-size* 32)
 
 (defvar *clients*)
 (defvar *event-base*)
@@ -137,6 +138,8 @@
    (start
     :initform 0)
    (end
+    :initform 0)
+   (still-reading
     :initform 0)))
 
 (defclass nailgun-binary-output-stream (nailgun-binary-stream
@@ -148,13 +151,16 @@
   'octet)
 
 (defmethod stream-read-byte ((stream nailgun-binary-input-stream))
-  (with-slots ((buffer-slot buffer) (start-slot start) (end-slot end)
+  (with-slots ((buffer-slot buffer) (still-reading-slot still-reading)
+               (start-slot start) (end-slot end)
                socket state)
       stream
-    (let ((socket socket)
-          (buffer buffer-slot)
-          (start start-slot)
-          (end end-slot))
+    (let* ((socket socket)
+           (buffer buffer-slot)
+           (buffer-length (length buffer))
+           (still-reading still-reading-slot)
+           (start start-slot)
+           (end end-slot))
       (block NIL
         (tagbody
            (when (eq state :eof)
@@ -167,6 +173,15 @@
                               (when (eql start end)
                                 (setf start (setf end-slot (setf end 0))))
                               (setf start-slot start)))))
+           (unless (eql still-reading 0)
+             (let* ((read (min still-reading buffer-length))
+                    (read-index (read-sequence buffer socket :end read)))
+               (unless (eql read-index read)
+                 (go :eof))
+               (setf still-reading (decf still-reading-slot read))
+               (setf start (setf start-slot 0))
+               (setf end (setf end-slot read)))
+             (go :stdin))
            (write-length 0 socket)
            (write-type :start-input socket)
            (finish-output socket)
@@ -178,8 +193,13 @@
            (setf start-slot (setf start 0))
            (setf end-slot (setf end (parse-length buffer)))
            (let ((type (parse-type buffer)))
-             (when (> end (length buffer))
-               (setf buffer-slot (setf buffer (make-buffer end))))
+             (when (> end buffer-length)
+               (let ((min (min end *max-buffer-size*)))
+                 (unless (eql min buffer-length)
+                   (setf buffer-slot (setf buffer (make-buffer (setf buffer-length min)))))))
+             (when (> end buffer-length)
+               (setf still-reading (setf still-reading-slot (- end buffer-length)))
+               (setf end (setf end-slot buffer-length)))
              (let ((read-index (read-sequence buffer socket :end end)))
                (unless (eql read-index end)
                  (go :eof)))
@@ -197,13 +217,16 @@
 (defmethod stream-read-sequence ((stream nailgun-binary-input-stream) sequence seq-start seq-end &key)
   (when (>= seq-start seq-end)
     (return-from stream-read-sequence seq-start))
-  (with-slots ((buffer-slot buffer) (start-slot start) (end-slot end)
+  (with-slots ((buffer-slot buffer) (still-reading-slot still-reading)
+               (start-slot start) (end-slot end)
                socket state)
       stream
-    (let ((socket socket)
-          (buffer buffer-slot)
-          (start start-slot)
-          (end end-slot))
+    (let* ((socket socket)
+           (buffer buffer-slot)
+           (buffer-length (length buffer))
+           (still-reading still-reading-slot)
+           (start start-slot)
+           (end end-slot))
       (block NIL
         (tagbody
            (when (eq state :eof)
@@ -219,6 +242,15 @@
                (setf start-slot (incf start copied))
                (when (eql seq-start seq-end)
                  (return seq-start))))
+           (unless (eql still-reading 0)
+             (let* ((read (min still-reading buffer-length))
+                    (read-index (read-sequence buffer socket :end read)))
+               (unless (eql read-index read)
+                 (go :eof))
+               (setf still-reading (decf still-reading-slot read))
+               (setf start (setf start-slot 0))
+               (setf end (setf end-slot read)))
+             (go :stdin))
            (write-length 0 socket)
            (write-type :start-input socket)
            (finish-output socket)
@@ -230,8 +262,13 @@
            (setf start-slot (setf start 0))
            (setf end-slot (setf end (parse-length buffer)))
            (let ((type (parse-type buffer)))
-             (when (> end (length buffer))
-               (setf buffer-slot (setf buffer (make-buffer end))))
+             (when (> end buffer-length)
+               (let ((min (min end *max-buffer-size*)))
+                 (unless (eql min buffer-length)
+                   (setf buffer-slot (setf buffer (make-buffer (setf buffer-length min)))))))
+             (when (> end buffer-length)
+               (setf still-reading (setf still-reading-slot (- end buffer-length)))
+               (setf end (setf end-slot buffer-length)))
              (let ((read-index (read-sequence buffer socket :end end)))
                (unless (eql read-index end)
                  (go :eof)))
@@ -265,11 +302,11 @@
   (format T "called as ~A ~{~A~^ ~} in ~A~%" command arguments directory)
   (format output "Hello, World!~%")
   (format error "Errors go here!~%")
-  (let ((buffer (make-buffer 5)))
+  (let ((buffer (make-buffer (* *max-buffer-size* 10))))
     (loop
       (format output "~S~%" (or (read-line input NIL) (return)))
       (progn
-        (unless (eql (read-sequence buffer input) 5)
+        (unless (eql (read-sequence buffer input) (length buffer))
           (return))
         (format output "~S~%" buffer)))))
 
