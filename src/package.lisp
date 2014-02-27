@@ -8,4 +8,8 @@
   (:import-from #:nibbles #:ub32ref/be #:write-ub32/be #:make-octet-vector)
   (:shadowing-import-from #:babel #:octets-to-string)
   (:export ;;; main entry point
-           #:run-server))
+           #:run-server
+
+           ;;; settings
+           #:*default-buffer-size*
+           #:*max-buffer-size*))
