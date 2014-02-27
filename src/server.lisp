@@ -146,39 +146,50 @@
   'octet)
 
 (defmethod stream-read-byte ((stream nailgun-binary-input-stream))
-  (with-slots (socket state buffer start end) stream
-    (when (eq state :eof)
-      (return-from stream-read-byte :eof))
-    (when (> end start)
-      (return-from stream-read-byte
-        (aref buffer (prog1 start
-                       (incf start)
-                       (when (eql start end)
-                         (setf start (setf end 0)))))))
-    (write-length 0 socket)
-    (write-type :start-input socket)
-    (finish-output socket)
-    (setf state :start-input)
-    (loop
-      (let ((read-index (read-sequence buffer socket :end 5)))
-        (unless (eql read-index 5)
-          (setf state :eof)
-          (error 'end-of-file :stream socket)))
-      (setf start 0)
-      (setf end (parse-length buffer))
-      (when (> end (length buffer))
-        (setf buffer (make-buffer end)))
-      (let ((read-index (read-sequence buffer socket :end end)))
-        (unless (eql read-index end)
-          (setf state :eof)
-          (error 'end-of-file :stream socket)))
-      (ecase (parse-type buffer)
-        (:stdin
-         (return (stream-read-byte stream)))
-        ;; TODO: do what if a timeout occurs?
-        (:heartbeat)
-        (:eof
-         (return (setf state :eof)))))))
+  (with-slots ((buffer-slot buffer) (start-slot start) (end-slot end)
+               socket state)
+      stream
+    (let ((socket socket)
+          (buffer buffer-slot)
+          (start start-slot)
+          (end end-slot))
+      (block NIL
+        (tagbody
+           (when (eq state :eof)
+             (return :eof))
+         :stdin
+           (when (> end start)
+             (return
+               (aref buffer (prog1 start
+                              (incf start)
+                              (when (eql start end)
+                                (setf start (setf end-slot (setf end 0))))
+                              (setf start-slot start)))))
+           (write-length 0 socket)
+           (write-type :start-input socket)
+           (finish-output socket)
+           (setf state :start-input)
+         :wait
+           (let ((read-index (read-sequence buffer socket :end 5)))
+             (unless (eql read-index 5)
+               (setf state :eof)
+               (error 'end-of-file :stream socket)))
+           (setf start-slot (setf start 0))
+           (setf end-slot (setf end (parse-length buffer)))
+           (when (> end (length buffer))
+             (setf buffer-slot (setf buffer (make-buffer end))))
+           (let ((read-index (read-sequence buffer socket :end end)))
+             (unless (eql read-index end)
+               (setf state :eof)
+               (error 'end-of-file :stream socket)))
+           (ecase (parse-type buffer)
+             (:stdin
+              (go :stdin))
+             ;; TODO: do what if a timeout occurs?
+             (:heartbeat
+              (go :wait))
+             (:eof
+              (return (setf state :eof)))))))))
 
 (defmethod stream-write-byte ((stream nailgun-binary-output-stream) integer)
   (with-slots (socket fd) stream
