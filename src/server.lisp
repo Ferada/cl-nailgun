@@ -267,10 +267,7 @@
   (format error "Errors go here!~%")
   (let ((buffer (make-buffer 5)))
     (loop
-      (let ((line (read-line input NIL)))
-        (unless line
-          (return))
-        (format output "~S~%" line))
+      (format output "~S~%" (or (read-line input NIL) (return)))
       (progn
         (unless (eql (read-sequence buffer input) 5)
           (return))
