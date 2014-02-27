@@ -7,40 +7,49 @@
 (defvar *clients*)
 (defvar *event-base*)
 
+(declaim (inline make-buffer))
+
+(defun make-buffer (size)
+  (make-octet-vector size))
+
+(defun make-server-accept-handler (server handler)
+  (lambda (fd event exception)
+    (declare (ignore fd event exception))
+    (let ((socket (accept-connection server :wait NIL :element-type 'octet)))
+      (when socket
+        (setf (gethash socket *clients*)
+              (make-thread
+               (lambda ()
+                 (unwind-protect
+                      (handle-client-prolog
+                       socket
+                       (make-buffer *default-buffer-size*)
+                       handler)
+                   (close socket)
+                   (remhash socket *clients*)))
+               :name (format NIL "nailgun-client/~A" (remote-name socket))
+               :initial-bindings `((*standard-output* . ,*standard-output*)
+                                   (*clients* . ,*clients*))))))))
+
 (defun run-server (handler &key (port 2113))
   (let (*clients* *event-base*)
     (unwind-protect
          (progn
+           ;; TODO: synchronized?
            (setf *clients* (make-hash-table :test 'eq)
                  *event-base* (make-instance 'event-base))
            (with-open-socket
                (server :connect :passive
                        :address-family :internet
                        :type :stream
-                       :ipv6 NIL)
-             (bind-address server +ipv4-unspecified+ :port port :reuse-addr T)
+                       :ipv6 T)
+             (bind-address server +ipv6-unspecified+ :port port :reuse-addr T)
              (listen-on server :backlog 5)
              (set-io-handler
               *event-base*
               (socket-os-fd server)
               :read
-              (lambda (fd event exception)
-                (declare (ignore fd event exception))
-                (let ((socket (accept-connection server :wait NIL :element-type 'unsigned-byte)))
-                  (when socket
-                    (setf (gethash socket *clients*)
-                          (make-thread
-                           (lambda ()
-                             (unwind-protect
-                                  (handle-client-prolog
-                                   socket
-                                   (make-array *default-buffer-size* :element-type '(unsigned-byte 8))
-                                   handler)
-                               (close socket)
-                               (remhash socket *clients*)))
-                           :name (format NIL "nailgun-client/~A" (remote-name socket))
-                           :initial-bindings `((*standard-output* . ,*standard-output*)
-                                               (*clients* . ,*clients*))))))))
+              (make-server-accept-handler server handler))
              (event-dispatch *event-base*)))
       (maphash
        (lambda (socket thread)
@@ -48,9 +57,18 @@
          (destroy-thread thread))
        *clients*)
       (when *event-base*
-        (close *event-base*)))))
+        (close *event-base*))))
+  (values))
+
+(declaim (inline parse-length write-length))
 
-(defun handle-client-prolog (socket buffer handler)
+(defun parse-length (header)
+  (ub32ref/be header 0))
+
+(defun write-length (length stream)
+  (write-ub32/be length stream))
+
+(defun collect-client-prolog (socket buffer)
   (let (environment directory command)
     (with-collector (arguments)
       (loop
@@ -60,7 +78,7 @@
         (let* ((length (parse-length buffer))
                (type (parse-type buffer)))
           (when (> length (length buffer))
-            (setf buffer (make-array length :element-type '(unsigned-byte 8))))
+            (setf buffer (make-buffer length)))
           (let ((read-index (read-sequence buffer socket :end length)))
             (unless (eql read-index length)
               (error 'end-of-file :stream socket)))
@@ -78,20 +96,25 @@
               (:command
                (setf command string)
                (return))))))
-      (funcall handler
-               command (arguments) directory environment
-               (make-flexi-stream
-                (make-instance 'nailgun-binary-output-stream
-                               :socket socket
-                               :fd :stdout))
-               (make-flexi-stream
-                (make-instance 'nailgun-binary-output-stream
-                               :socket socket
-                               :fd :stderr))
-               (make-flexi-stream
-                (make-instance 'nailgun-binary-input-stream
-                               :socket socket
-                               :buffer buffer))))))
+      (values environment directory command (arguments)))))
+
+(defun handle-client-prolog (socket buffer handler)
+  (multiple-value-bind (environment directory command arguments)
+      (collect-client-prolog socket buffer)
+    (funcall handler
+             command arguments directory environment
+             (make-flexi-stream
+              (make-instance 'nailgun-binary-output-stream
+                             :socket socket
+                             :fd :stdout))
+             (make-flexi-stream
+              (make-instance 'nailgun-binary-output-stream
+                             :socket socket
+                             :fd :stderr))
+             (make-flexi-stream
+              (make-instance 'nailgun-binary-input-stream
+                             :socket socket
+                             :buffer buffer)))))
 
 (defclass nailgun-binary-stream ()
   ((socket
@@ -119,8 +142,8 @@
   ((fd
     :initarg :fd)))
 
-(defmethod stream-element-type ((stream nailgun-binary-input-stream))
-  '(unsigned-byte 8))
+(defmethod stream-element-type ((stream nailgun-binary-stream))
+  'octet)
 
 (defmethod stream-read-byte ((stream nailgun-binary-input-stream))
   (with-slots (socket state buffer start end) stream
@@ -141,38 +164,35 @@
         (unless (eql read-index 5)
           (setf state :eof)
           (error 'end-of-file :stream socket)))
-      (let* ((length (parse-length buffer))
-             (type (parse-type buffer)))
-        (setf start 0)
-        (setf end length)
-        (when (> end (length buffer))
-          (setf buffer (make-array end :element-type '(unsigned-byte 8))))
-        (let ((read-index (read-sequence buffer socket :start start :end end)))
-          (unless (eql read-index end)
-            (setf state :eof)
-            (error 'end-of-file :stream socket)))
-        (ecase type
-          (:stdin
-           (return-from stream-read-byte (stream-read-byte stream)))
-          (:heartbeat)
-          (:eof
-           (setf state 'end-of-file)
-           (return-from stream-read-byte :eof)))))))
-
-(defmethod stream-element-type ((stream nailgun-binary-output-stream))
-  '(unsigned-byte 8))
+      (setf start 0)
+      (setf end (parse-length buffer))
+      (when (> end (length buffer))
+        (setf buffer (make-buffer end)))
+      (let ((read-index (read-sequence buffer socket :end end)))
+        (unless (eql read-index end)
+          (setf state :eof)
+          (error 'end-of-file :stream socket)))
+      (ecase (parse-type buffer)
+        (:stdin
+         (return (stream-read-byte stream)))
+        ;; TODO: do what if a timeout occurs?
+        (:heartbeat)
+        (:eof
+         (return (setf state :eof)))))))
 
 (defmethod stream-write-byte ((stream nailgun-binary-output-stream) integer)
-  (let ((socket (slot-value stream 'socket)))
+  (with-slots (socket fd) stream
     (write-length 1 socket)
-    (write-type (slot-value stream 'fd) socket)
+    (write-type fd socket)
     (write-byte integer socket)))
 
 (defmethod stream-write-sequence ((stream nailgun-binary-output-stream) sequence start end &key)
-  (let ((socket (slot-value stream 'socket)))
-    (write-length (length sequence) socket)
-    (write-type (slot-value stream 'fd) socket)
-    (write-sequence sequence socket)))
+  (when (>= start end)
+    (return-from stream-write-sequence sequence))
+  (with-slots (socket fd) stream
+    (write-length (- end start) socket)
+    (write-type fd socket)
+    (write-sequence sequence socket :start start :end end)))
 
 (defun test-handler (command arguments directory environment output error input)
   (logv:format-log "called as ~A ~{~A~^ ~} in ~A" command arguments directory)
@@ -183,27 +203,7 @@
       (unless line
         (return))
       (format output "~S~%" line))))
-
-(defun parse-length (header)
-  (+ (ash (aref header 0) 24)
-     (ash (aref header 1) 16)
-     (ash (aref header 2) 8)
-     (aref header 3)))
-
-(defun unparse-length (length)
-  (values (ash length -24)
-          (logand (ash length -16) #xff)
-          (logand (ash length -8) #xff)
-          (logand length #xff)))
-
-(defun write-length (length stream)
-  (multiple-value-bind (a b c d)
-      (unparse-length length)
-    (write-byte a stream)
-    (write-byte b stream)
-    (write-byte c stream)
-    (write-byte d stream)))
-
+
 (macrolet
       ((aux (&rest forms)
          `(progn

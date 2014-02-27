@@ -9,7 +9,7 @@
   :license "Simplified BSD License"
   :version "0.0.1"
   #+asdf-unicode :encoding #+asdf-unicode :utf-8
-  :depends-on (#:bordeaux-threads #:iolib #:trivial-gray-streams #:babel #:alexandria #:flexi-streams)
+  :depends-on (#:bordeaux-threads #:iolib #:trivial-gray-streams #:babel #:alexandria #:flexi-streams #:nibbles)
   :in-order-to ((asdf:test-op (asdf:load-op #:cl-nailgun-tests)))
   :perform (asdf:test-op :after (op c)
              (funcall (find-symbol (symbol-name '#:run!) '#:fiveam)
