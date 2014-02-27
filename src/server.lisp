@@ -158,7 +158,7 @@
       (block NIL
         (tagbody
            (when (eq state :eof)
-             (return :eof))
+             (go :eof))
          :stdin
            (when (> end start)
              (return
@@ -174,24 +174,78 @@
          :wait
            (let ((read-index (read-sequence buffer socket :end +header-length+)))
              (unless (eql read-index +header-length+)
-               (setf state :eof)
-               (error 'end-of-file :stream socket)))
+               (go :eof)))
            (setf start-slot (setf start 0))
            (setf end-slot (setf end (parse-length buffer)))
-           (when (> end (length buffer))
-             (setf buffer-slot (setf buffer (make-buffer end))))
-           (let ((read-index (read-sequence buffer socket :end end)))
-             (unless (eql read-index end)
-               (setf state :eof)
-               (error 'end-of-file :stream socket)))
-           (ecase (parse-type buffer)
-             (:stdin
-              (go :stdin))
-             ;; TODO: do what if a timeout occurs?
-             (:heartbeat
-              (go :wait))
-             (:eof
-              (return (setf state :eof)))))))))
+           (let ((type (parse-type buffer)))
+             (when (> end (length buffer))
+               (setf buffer-slot (setf buffer (make-buffer end))))
+             (let ((read-index (read-sequence buffer socket :end end)))
+               (unless (eql read-index end)
+                 (go :eof)))
+             (ecase type
+               (:stdin
+                (go :stdin))
+               ;; TODO: do what if a timeout occurs?
+               (:heartbeat
+                (go :wait))
+               (:eof
+                (go :eof))))
+         :eof
+           (return (setf state :eof)))))))
+
+(defmethod stream-read-sequence ((stream nailgun-binary-input-stream) sequence seq-start seq-end &key)
+  (when (>= seq-start seq-end)
+    (return-from stream-read-sequence seq-start))
+  (with-slots ((buffer-slot buffer) (start-slot start) (end-slot end)
+               socket state)
+      stream
+    (let ((socket socket)
+          (buffer buffer-slot)
+          (start start-slot)
+          (end end-slot))
+      (block NIL
+        (tagbody
+           (when (eq state :eof)
+             (go :eof))
+         :stdin
+           (when (> end start)
+             (replace sequence buffer
+                      :start1 seq-start :end1 seq-end
+                      :start2 start :end2 end)
+             (let ((copied (min (- seq-end seq-start)
+                                (- end start))))
+               (incf seq-start copied)
+               (setf start-slot (incf start copied))
+               (when (eql seq-start seq-end)
+                 (return seq-start))))
+           (write-length 0 socket)
+           (write-type :start-input socket)
+           (finish-output socket)
+           (setf state :start-input)
+         :wait
+           (let ((read-index (read-sequence buffer socket :end +header-length+)))
+             (unless (eql read-index +header-length+)
+               (go :eof)))
+           (setf start-slot (setf start 0))
+           (setf end-slot (setf end (parse-length buffer)))
+           (let ((type (parse-type buffer)))
+             (when (> end (length buffer))
+               (setf buffer-slot (setf buffer (make-buffer end))))
+             (let ((read-index (read-sequence buffer socket :end end)))
+               (unless (eql read-index end)
+                 (go :eof)))
+             (ecase type
+               (:stdin
+                (go :stdin))
+               ;; TODO: do what if a timeout occurs?
+               (:heartbeat
+                (go :wait))
+               (:eof
+                (go :eof))))
+         :eof
+           (setf state :eof)
+           (return seq-start))))))
 
 (defmethod stream-write-byte ((stream nailgun-binary-output-stream) integer)
   (with-slots (socket fd) stream
@@ -211,11 +265,16 @@
   (logv:format-log "called as ~A ~{~A~^ ~} in ~A" command arguments directory)
   (format output "Hello, World!~%")
   (format error "Errors go here!~%")
-  (loop
-    (let ((line (read-line input NIL)))
-      (unless line
-        (return))
-      (format output "~S~%" line))))
+  (let ((buffer (make-buffer 5)))
+    (loop
+      (let ((line (read-line input NIL)))
+        (unless line
+          (return))
+        (format output "~S~%" line))
+      (progn
+        (unless (eql (read-sequence buffer input) 5)
+          (return))
+        (format output "~S~%" buffer)))))
 
 (macrolet
       ((aux (&rest forms)
