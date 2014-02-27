@@ -68,12 +68,14 @@
 (defun write-length (length stream)
   (write-ub32/be length stream))
 
+(defconstant +header-length+ 5)
+
 (defun collect-client-prolog (socket buffer)
   (let (environment directory command)
     (with-collector (arguments)
       (loop
-        (let ((read-index (read-sequence buffer socket :end 5)))
-          (unless (eql read-index 5)
+        (let ((read-index (read-sequence buffer socket :end +header-length+)))
+          (unless (eql read-index +header-length+)
             (error 'end-of-file :stream socket)))
         (let* ((length (parse-length buffer))
                (type (parse-type buffer)))
@@ -170,8 +172,8 @@
            (finish-output socket)
            (setf state :start-input)
          :wait
-           (let ((read-index (read-sequence buffer socket :end 5)))
-             (unless (eql read-index 5)
+           (let ((read-index (read-sequence buffer socket :end +header-length+)))
+             (unless (eql read-index +header-length+)
                (setf state :eof)
                (error 'end-of-file :stream socket)))
            (setf start-slot (setf start 0))
