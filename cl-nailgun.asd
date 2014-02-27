@@ -3,13 +3,13 @@
 (in-package #:cl-user)
 
 (asdf:defsystem #:cl-nailgun
-  :description ""
-  :long-description ""
+  :description "Nailgun server"
+  :long-description "Remotely hosted command line programs for Common Lisp."
   :author "Olof-Joachim Frahm <olof@macrolet.net>"
   :license "Simplified BSD License"
   :version "0.0.1"
   #+asdf-unicode :encoding #+asdf-unicode :utf-8
-  :depends-on (#:bordeaux-threads #:iolib #:trivial-gray-streams #:babel #:alexandria #:flexi-streams #:nibbles)
+  :depends-on (#:bordeaux-threads #:iolib #:trivial-gray-streams #:babel #:alexandria #:flexi-streams #:nibbles #:arnesi)
   :in-order-to ((asdf:test-op (asdf:load-op #:cl-nailgun-tests)))
   :perform (asdf:test-op :after (op c)
              (funcall (find-symbol (symbol-name '#:run!) '#:fiveam)
@@ -18,4 +18,5 @@
   :components ((:static-file "README.md")
                (:module "src"
                 :components
-                ((:file "package")))))
+                ((:file "package")
+                 (:file "server")))))
