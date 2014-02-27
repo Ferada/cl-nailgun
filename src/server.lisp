@@ -262,7 +262,7 @@
     (write-sequence sequence socket :start start :end end)))
 
 (defun test-handler (command arguments directory environment output error input)
-  (logv:format-log "called as ~A ~{~A~^ ~} in ~A" command arguments directory)
+  (format T "called as ~A ~{~A~^ ~} in ~A~%" command arguments directory)
   (format output "Hello, World!~%")
   (format error "Errors go here!~%")
   (let ((buffer (make-buffer 5)))
