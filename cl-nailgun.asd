@@ -7,7 +7,7 @@
   :long-description "Remotely hosted command line programs for Common Lisp."
   :author "Olof-Joachim Frahm <olof@macrolet.net>"
   :license "Simplified BSD License"
-  :version "0.0.1"
+  :version "0.0.2"
   #+asdf-unicode :encoding #+asdf-unicode :utf-8
   :depends-on (#:bordeaux-threads #:iolib #:trivial-gray-streams #:babel #:alexandria #:flexi-streams #:nibbles #:arnesi)
   :in-order-to ((asdf:test-op (asdf:load-op #:cl-nailgun-tests)))

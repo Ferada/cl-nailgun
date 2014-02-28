@@ -23,14 +23,17 @@ Then the server has to be run:
 
     > (cl-nailgun:run-server
         (lambda (command arguments directory
-                 environment output error input)
-          (format T "called as ~A ~{~A~^ ~} in ~A~%"
-                  command arguments directory)
-          (format output "Hello, World!~%")
-          (format error "Errors go here!~%")
-          (loop
-            (format output "~S~%" (or (read-line input NIL) (return))))
-          (cl-nailgun:exit 2)))
+                 environment streams)
+          (let ((output (funcall streams :stdout))
+                (error (funcall streams :stderr))
+                (input (funcall streams :stdin)))
+            (format T "called as ~A ~{~A~^ ~} in ~A~%"
+                    command arguments directory)
+            (format output "Hello, World!~%")
+            (format error "Errors go here!~%")
+            (loop
+              (format output "~S~%" (or (read-line input NIL) (return))))
+            (cl-nailgun:exit 2))))
 
 The single argument to `RUN-SERVER` is a handler function.  The handler
 is run in a separate thread and may read and write from the streams

@@ -7,7 +7,7 @@
   :long-description "Persistent Common Lisp scripting daemon via nailgun."
   :author "Olof-Joachim Frahm <olof@macrolet.net>"
   :license "Simplified BSD License"
-  :version "0.0.1"
+  :version "0.0.2"
   #+asdf-unicode :encoding #+asdf-unicode :utf-8
   :depends-on (#:cl-nailgun #:com.dvlsoft.clon)
   :serial T

@@ -31,6 +31,11 @@
                    (remhash socket *clients*)))
                :name (format NIL "nailgun-client/~A" (remote-name socket))
                :initial-bindings `((*standard-output* . ,*standard-output*)
+                                   (*error-output* . ,*error-output*)
+                                   (*standard-input* . ,*standard-input*)
+                                   (*trace-output* . ,*trace-output*)
+                                   (*terminal-io* . ,*terminal-io*)
+                                   (*debug-io* . ,*debug-io*)
                                    (*clients* . ,*clients*))))))))
 
 (defun run-server (handler &key (port 2113) (environmentp T))
@@ -72,6 +77,13 @@
 
 (defconstant +header-length+ 5)
 
+(defun getenv (name list)
+  (dolist (string list)
+    (let ((position (position #\= string)))
+      (when (and (eql (length name) position)
+                 (string= name string :end2 position))
+        (return (subseq string (1+ position)))))))
+
 (defun collect-client-prolog (socket buffer environmentp)
   (let (environment directory command)
     (with-collector (arguments)
@@ -93,10 +105,7 @@
             (ecase type
               (:environment
                (when environmentp
-                 (push (let ((position (position #\= string)))
-                         (cons (subseq string 0 position)
-                               (subseq string (1+ position))))
-                       environment)))
+                 (push string environment)))
               (:argument
                (arguments string))
               (:directory
@@ -121,22 +130,35 @@
                            'nailgun-binary-input-stream)
                        :socket socket
                        args))))
-        (let ((stdout (aux T :fd :stdout))
-              (stderr (aux T :fd :stderr))
-              (stdin (aux NIL :buffer buffer))
-              (exit-code 1))
+        (let ((exit-code 1)
+              stdout stderr stdin)
           (unwind-protect
                (setf exit-code
                      (catch exit
-                       (funcall handler
-                                command arguments directory environment
-                                stdout stderr stdin)
-                       0))
-            (let ((sequence (string-to-octets (format NIL "~D" exit-code))))
-              (write-length (length sequence) socket)
-              (write-type :exit socket)
-              (write-sequence sequence socket)
-              (finish-output socket))))))))
+                       (prog1 0
+                         (funcall
+                          handler
+                          command arguments directory environment
+                          (lambda (name)
+                            (ecase name
+                              (:stdout
+                               (or stdout (setf stdout (aux T :fd :stdout))))
+                              (:stderr
+                               (or stderr (setf stdout (aux T :fd :stderr))))
+                              (:stdin
+                               (or stdin (setf stdin (aux NIL :buffer buffer))))))))))
+            (when stdout
+              (close stdout))
+            (when stderr
+              (close stderr))
+            (when stdin
+              (close stdin))
+            (when (open-stream-p socket)
+              (let ((sequence (string-to-octets (format NIL "~D" exit-code))))
+                (write-length (length sequence) socket)
+                (write-type :exit socket)
+                (write-sequence sequence socket)
+                (finish-output socket)))))))))
 
 (defclass nailgun-binary-stream ()
   ((socket

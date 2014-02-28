@@ -13,4 +13,7 @@
 
            ;;; settings
            #:*default-buffer-size*
-           #:*max-buffer-size*))
+           #:*max-buffer-size*
+
+           ;;; convenience
+           #:getenv))
