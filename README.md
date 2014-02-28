@@ -29,12 +29,18 @@ Then the server has to be run:
           (format output "Hello, World!~%")
           (format error "Errors go here!~%")
           (loop
-            (format output "~S~%" (or (read-line input NIL) (return))))))
+            (format output "~S~%" (or (read-line input NIL) (return))))
+          (cl-nailgun:exit 2)))
 
 The single argument to `RUN-SERVER` is a handler function.  The handler
 is run in a separate thread and may read and write from the streams
 provided in the last three arguments.  (At the moment each of them is
-wrapped with `flexi-streams` to provide character IO.
+wrapped with `flexi-streams` to provide character IO.)
+
+After execution is finished, the exit code is 0 by default, or 1 if
+execution was aborted, e.g. if an error occured.  The function `EXIT`
+can be used to terminate early with an optional status code argument
+(again, the default is 0).
 
 Next, calls from the nailgun client will be answered by the server:
 
@@ -43,6 +49,8 @@ Next, calls from the nailgun client will be answered by the server:
     Hello, World!
     Errors go here!
     "HELLO WORLD"
+    $ echo $?
+    2
 
 The REPL will also show the log message for each connection:
 
