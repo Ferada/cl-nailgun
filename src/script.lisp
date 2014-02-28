@@ -34,5 +34,5 @@
       (format T "~A~%" (handler-case (eval (or (read T NIL) (return)))
                          (error (error) error))))))
 
-(defun start ()
-  (run-server #'main))
+(defun start (&optional (port 2323))
+  (run-server #'main :port port))
