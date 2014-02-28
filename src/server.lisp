@@ -13,7 +13,7 @@
 (defun make-buffer (size)
   (make-octet-vector size))
 
-(defun make-server-accept-handler (server handler)
+(defun make-server-accept-handler (server handler environmentp)
   (lambda (fd event exception)
     (declare (ignore fd event exception))
     (let ((socket (accept-connection server :wait NIL :element-type 'octet)))
@@ -25,14 +25,15 @@
                       (handle-client-prolog
                        socket
                        (make-buffer *default-buffer-size*)
-                       handler)
+                       handler
+                       environmentp)
                    (close socket)
                    (remhash socket *clients*)))
                :name (format NIL "nailgun-client/~A" (remote-name socket))
                :initial-bindings `((*standard-output* . ,*standard-output*)
                                    (*clients* . ,*clients*))))))))
 
-(defun run-server (handler &key (port 2113))
+(defun run-server (handler &key (port 2113) (environmentp T))
   (let (*clients* *event-base*)
     (unwind-protect
          (progn
@@ -50,7 +51,7 @@
               *event-base*
               (socket-os-fd server)
               :read
-              (make-server-accept-handler server handler))
+              (make-server-accept-handler server handler environmentp))
              (event-dispatch *event-base*)))
       (maphash
        (lambda (socket thread)
@@ -71,7 +72,7 @@
 
 (defconstant +header-length+ 5)
 
-(defun collect-client-prolog (socket buffer)
+(defun collect-client-prolog (socket buffer environmentp)
   (let (environment directory command)
     (with-collector (arguments)
       (loop
@@ -88,10 +89,11 @@
           (let ((string (octets-to-string buffer :end length)))
             (ecase type
               (:environment
-               (push (let ((position (position #\= string)))
-                       (cons (subseq string 0 position)
-                             (subseq string (1+ position))))
-                     environment))
+               (when environmentp
+                 (push (let ((position (position #\= string)))
+                         (cons (subseq string 0 position)
+                               (subseq string (1+ position))))
+                       environment)))
               (:argument
                (arguments string))
               (:directory
@@ -105,9 +107,9 @@
   (defun exit (&optional (code 0))
     (throw exit code))
 
-  (defun handle-client-prolog (socket buffer handler)
+  (defun handle-client-prolog (socket buffer handler environmentp)
     (multiple-value-bind (environment directory command arguments)
-        (collect-client-prolog socket buffer)
+        (collect-client-prolog socket buffer environmentp)
       (flet ((aux (outputp &rest args)
                (make-flexi-stream
                 (apply #'make-instance
