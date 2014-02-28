@@ -316,18 +316,6 @@
     (write-length (- end start) socket)
     (write-type fd socket)
     (write-sequence sequence socket :start start :end end)))
-
-(defun test-handler (command arguments directory environment output error input)
-  (format T "called as ~A ~{~A~^ ~} in ~A~%" command arguments directory)
-  (format output "Hello, World!~%")
-  (format error "Errors go here!~%")
-  (let ((buffer (make-buffer (* *max-buffer-size* 10))))
-    (loop
-      (format output "~S~%" (or (read-line input NIL) (return)))
-      (progn
-        (unless (eql (read-sequence buffer input) (length buffer))
-          (return))
-        (format output "~S~%" buffer)))))
 
 (macrolet
       ((aux (&rest forms)
