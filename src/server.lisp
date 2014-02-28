@@ -86,7 +86,10 @@
           (let ((read-index (read-sequence buffer socket :end length)))
             (unless (eql read-index length)
               (error 'end-of-file :stream socket)))
-          (let ((string (octets-to-string buffer :end length)))
+          (let (string)
+            (unless (and (eq type :environment)
+                         (not environmentp))
+              (setf string (octets-to-string buffer :end length)))
             (ecase type
               (:environment
                (when environmentp
