@@ -3,7 +3,8 @@
 (in-package #:cl-user)
 
 (defpackage #:cl-nailgun-script
-  (:use #:cl #:cl-nailgun)
+  (:use #:cl #:cl-nailgun #:com.dvlsoft.clon)
+  (:shadowing-import-from #:cl-nailgun #:exit)
   (:export ;;; main entry points
            #:start
            #:main))

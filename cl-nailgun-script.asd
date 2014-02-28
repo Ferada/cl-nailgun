@@ -9,7 +9,7 @@
   :license "Simplified BSD License"
   :version "0.0.1"
   #+asdf-unicode :encoding #+asdf-unicode :utf-8
-  :depends-on (#:cl-nailgun)
+  :depends-on (#:cl-nailgun #:com.dvlsoft.clon)
   :serial T
   :components ((:static-file "README.md")
                (:module "src"
