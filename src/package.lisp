@@ -7,8 +7,9 @@
   (:import-from #:arnesi #:with-collector)
   (:import-from #:nibbles #:ub32ref/be #:write-ub32/be #:make-octet-vector)
   (:shadowing-import-from #:babel #:octets-to-string)
-  (:export ;;; main entry point
+  (:export ;;; main entry points
            #:run-server
+           #:exit
 
            ;;; settings
            #:*default-buffer-size*

@@ -101,23 +101,37 @@
                (return))))))
       (values environment directory command (arguments)))))
 
-(defun handle-client-prolog (socket buffer handler)
-  (multiple-value-bind (environment directory command arguments)
-      (collect-client-prolog socket buffer)
-    (funcall handler
-             command arguments directory environment
-             (make-flexi-stream
-              (make-instance 'nailgun-binary-output-stream
-                             :socket socket
-                             :fd :stdout))
-             (make-flexi-stream
-              (make-instance 'nailgun-binary-output-stream
-                             :socket socket
-                             :fd :stderr))
-             (make-flexi-stream
-              (make-instance 'nailgun-binary-input-stream
-                             :socket socket
-                             :buffer buffer)))))
+(let ((exit (gensym)))
+  (defun exit (&optional (code 0))
+    (throw exit code))
+
+  (defun handle-client-prolog (socket buffer handler)
+    (multiple-value-bind (environment directory command arguments)
+        (collect-client-prolog socket buffer)
+      (flet ((aux (outputp &rest args)
+               (make-flexi-stream
+                (apply #'make-instance
+                       (if outputp
+                           'nailgun-binary-output-stream
+                           'nailgun-binary-input-stream)
+                       :socket socket
+                       args))))
+        (let ((stdout (aux T :fd :stdout))
+              (stderr (aux T :fd :stderr))
+              (stdin (aux NIL :buffer buffer))
+              (exit-code 1))
+          (unwind-protect
+               (setf exit-code
+                     (catch exit
+                       (funcall handler
+                                command arguments directory environment
+                                stdout stderr stdin)
+                       0))
+            (let ((sequence (string-to-octets (format NIL "~D" exit-code))))
+              (write-length (length sequence) socket)
+              (write-type :exit socket)
+              (write-sequence sequence socket)
+              (finish-output socket))))))))
 
 (defclass nailgun-binary-stream ()
   ((socket
