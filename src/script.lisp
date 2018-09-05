@@ -2,14 +2,6 @@
 
 (in-package #:cl-nailgun-script)
 
-(defsynopsis (:postfix "FILES...")
-  (text :contents "A very short program.")
-  (group (:header "Immediate exit options:")
-    (flag :short-name "h" :long-name "help"
-          :description "Print this help and exit.")
-    (flag :short-name "v" :long-name "version"
-          :description "Print version number and exit.")))
-
 (defun main (command arguments directory environment streams)
   (let* ((*standard-output* (funcall streams :stdout))
          (*error-output* (funcall streams :stderr))
@@ -23,16 +15,16 @@
                                              (list (file-namestring directory)))
                           :name NIL :type NIL :version NIL
                           :defaults directory)))
-    (make-context :cmdline (cons command arguments))
-    (when (getopt :short-name "h")
-      (help)
-      (exit))
-    (do-cmdline-options (option name value source)
-      (print (list option name value source)))
-    (terpri)
-    (loop
-      (format T "~A~%" (handler-case (eval (or (read T NIL) (return)))
-                         (error (error) error))))))
+    (with-cli-options (arguments "A very short program.~%~%Usage:~%~@{~A~%~}~%")
+                      (version &parameters)
+      (cond
+        (version
+         (format T "0.0.1~%"))
+        (T
+         (format T "~A ~A ~A~%" command free environment)
+         (loop
+           (format T "~A~%" (handler-case (eval (or (read T NIL) (return)))
+                              (error (error) error)))))))))
 
 (defun start (&optional (port 2323))
   (run-server #'main :port port))
