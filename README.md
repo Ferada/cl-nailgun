@@ -1,4 +1,4 @@
--*- mode: markdown; coding: utf-8-unix; -*-
+<!-- -*- mode: markdown; coding: utf-8-unix; -*- -->
 
 CL-NAILGUN - Remotely hosted command line programs for Common Lisp.
 
@@ -9,7 +9,7 @@ Release under a Simplified BSD license.
 # DEPENDENCIES
 
 - a nailgun client, e.g. from [nailgun]
-- bordeaux-threads, trivial-gray-streams, babel, alexandria, flexi-streams
+- `bordeaux-threads`, `trivial-gray-streams`, `babel`, `alexandria`, `flexi-streams`, `arnesi`
 
 Should be reasonably portable.
 
@@ -17,23 +17,28 @@ Should be reasonably portable.
 
 You have to have the nailgun client installed and the library loaded:
 
-    > (asdf:load-system '#:cl-nailgun)
+```lisp
+(asdf:load-system '#:cl-nailgun)
+```
 
 Then the server has to be run:
 
-    > (cl-nailgun:run-server
-        (lambda (command arguments directory
-                 environment streams)
-          (let ((output (funcall streams :stdout))
-                (error (funcall streams :stderr))
-                (input (funcall streams :stdin)))
-            (format T "called as ~A ~{~A~^ ~} in ~A~%"
-                    command arguments directory)
-            (format output "Hello, World!~%")
-            (format error "Errors go here!~%")
-            (loop
-              (format output "~S~%" (or (read-line input NIL) (return))))
-            (cl-nailgun:exit 2))))
+```lisp
+(cl-nailgun:run-server
+  (lambda (command arguments directory
+           environment streams)
+    (declare (ignore environment))
+    (let ((output (funcall streams :stdout))
+          (error (funcall streams :stderr))
+          (input (funcall streams :stdin)))
+      (format T "called as ~A ~{~A~^ ~} in ~A~%"
+              command arguments directory)
+      (format output "Hello, World!~%")
+      (format error "Errors go here!~%")
+      (loop
+        (format output "~S~%" (or (read-line input NIL) (return))))
+      (cl-nailgun:exit 2))))
+```
 
 The single argument to `RUN-SERVER` is a handler function.  The handler
 is run in a separate thread and may read and write from the streams
@@ -47,17 +52,24 @@ can be used to terminate early with an optional status code argument
 
 Next, calls from the nailgun client will be answered by the server:
 
-    $ ln -s /usr/bin/ng foo && chmod a+x foo
-    $ echo HELLO WORLD | ./foo 1 2 3
-    Hello, World!
-    Errors go here!
-    "HELLO WORLD"
-    $ echo $?
-    2
+```bash
+$ ln -s /usr/bin/ng foo
+$ echo HELLO WORLD | ./foo 1 2 3
+Hello, World!
+Errors go here!
+"HELLO WORLD"
+$ echo $?
+2
+```
+
+(Note that `ng` might also be called differently, e.g. `ng-nailgun`, depending
+on your system.)
 
 The REPL will also show the log message for each connection:
 
-    called as foo 1 2 3 in /opt/cl-nailgun
+```
+called as foo 1 2 3 in /opt/cl-nailgun
+```
 
 # WHY
 
