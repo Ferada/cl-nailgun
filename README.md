@@ -2,16 +2,18 @@
 
 CL-NAILGUN - Remotely hosted command line programs for Common Lisp.
 
-Copyright (C) 2014 Olof-Joachim Frahm
+Copyright (C) 2014-2020 Olof-Joachim Frahm <olof@macrolet.net>
 
 Release under a Simplified BSD license.
 
 # DEPENDENCIES
 
-- a nailgun client, e.g. from [nailgun]
-- `bordeaux-threads`, `trivial-gray-streams`, `babel`, `alexandria`, `flexi-streams`, `arnesi`
+- a nailgun client, e.g. from [nailgun], [facebook], or
+  `apt-get install nailgun`
+- `bordeaux-threads`, `trivial-gray-streams`, `babel`, `alexandria`,
+  `flexi-streams`, `arnesi`
 
-Should be reasonably portable.
+Should be reasonably portable (tested on SBCL and CCL so far).
 
 # USAGE
 
@@ -71,6 +73,38 @@ The REPL will also show the log message for each connection:
 called as foo 1 2 3 in /opt/cl-nailgun
 ```
 
+# SCRIPTING
+
+An example of how to use this library for real is contained in the
+`CL-NAILGUN-SCRIPT` package, which implements a very simple `EVAL` based
+server.  (Note that this package additionally uses `unix-options` for command
+line argument parsing.)
+
+Load it, then call `(START)` (port is optional and defaults to `2323`) and
+access it like above via `ng` or a symlink to it:
+
+```bash
+$ ln -s /usr/bin/ng foo
+$ NAILGUN_PORT=2323 ./foo --help
+A very short program.
+
+Usage:
+  -v, --version  An option
+  -h, --help     Prints this summary
+$ NAILGUN_PORT=2323 ./foo
+foo NIL (_=./foo DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus ...)
+1
+1
+(+ 1 2 3)
+6
+```
+
+Each line read will be evaluated and the first result printed back to the
+caller.
+
+This is purely intended as an example and should **NOT** be used in a
+production setting like this.
+
 # WHY
 
 The main application of this library is to run scripts without the high
@@ -104,4 +138,5 @@ which leaves protocol extensions, or going the custom route.
 - Thread pool instead of spawning them all over the place.
 - External encoding should be configurable.
 
-[nailgun]: <https://github.com/martylamb/nailgun> "nailgun"
+[nailgun]: <https://github.com/martylamb/nailgun> "martylamb/nailgun"
+[facebook]: <https://github.com/facebook/nailgun> "facebook/nailgun"
